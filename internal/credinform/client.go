@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"scoring_worker/internal/config"
@@ -280,7 +281,7 @@ func (c *Client) getCompanyData(ctx context.Context, method string, companyID st
 
 	url := fmt.Sprintf("%s/api/%s?apiVersion=%s", c.config.BaseURL, method, c.apiVersion)
 	var responseBody []byte
-	var lastErr error
+	var allErrors []string
 
 	for attempt := 0; attempt <= c.config.RetryAttempts; attempt++ {
 		if attempt > 0 {
@@ -290,7 +291,8 @@ func (c *Client) getCompanyData(ctx context.Context, method string, companyID st
 
 		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqData))
 		if err != nil {
-			lastErr = fmt.Errorf("failed to create request for %s: %w", method, err)
+			errMessage := fmt.Sprintf("failed to create request for %s: %v", method, err)
+			allErrors = append(allErrors, errMessage)
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -298,41 +300,41 @@ func (c *Client) getCompanyData(ctx context.Context, method string, companyID st
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			lastErr = fmt.Errorf("failed to send request for %s: %w", method, err)
+			errMessage := fmt.Sprintf("failed to send request for %s: %v", method, err)
+			allErrors = append(allErrors, errMessage)
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			lastErr = fmt.Errorf("failed to read response for %s: %w", method, err)
+			errMessage := fmt.Sprintf("failed to read response for %s: %v", method, err)
+			allErrors = append(allErrors, errMessage)
 			continue
 		}
 
 		if resp.StatusCode == http.StatusUnauthorized {
 			c.logger.Info("Token expired, re-authenticating", zap.String("method", method))
+			allErrors = append(allErrors, "token expired (401)")
 			c.accessKey = ""
 			if err := c.Authenticate(ctx); err != nil {
-				lastErr = fmt.Errorf("failed to re-authenticate for %s: %w", method, err)
+				errMessage := fmt.Sprintf("failed to re-authenticate for %s: %v", method, err)
+				allErrors = append(allErrors, errMessage)
 				continue
 			}
-			// Retry the current request immediately after re-authenticating
-			attempt--
+			attempt-- // Retry the current request immediately after re-authenticating
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("request %s failed with status %d: %s", method, resp.StatusCode, string(body))
+			errMessage := fmt.Sprintf("request %s failed with status %d: %s", method, resp.StatusCode, string(body))
+			allErrors = append(allErrors, errMessage)
 			continue
 		}
 
 		responseBody = body
-		break
+		return responseBody, nil // Success, exit loop
 	}
 
-	if responseBody == nil {
-		return nil, fmt.Errorf("all retry attempts failed for %s: %w", method, lastErr)
-	}
-
-	return responseBody, nil
+	return nil, fmt.Errorf("all retry attempts failed for %s. Errors: [%s]", method, strings.Join(allErrors, "; "))
 }

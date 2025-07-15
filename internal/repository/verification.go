@@ -15,7 +15,7 @@ type VerificationRepository interface {
 	UpdateCompanyID(ctx context.Context, id string, companyID string) error
 	AddData(ctx context.Context, verificationID string, dataType string, data string) error
 	GetByID(ctx context.Context, id string) (*Verification, error)
-	GetByStatus(ctx context.Context, status string) ([]*Verification, error)
+	AcquireStaleVerification(ctx context.Context) (*Verification, error)
 }
 
 type Verification struct {
@@ -121,35 +121,33 @@ func (r *verificationRepository) GetByID(ctx context.Context, id string) (*Verif
 	return &verification, nil
 }
 
-func (r *verificationRepository) GetByStatus(ctx context.Context, status string) ([]*Verification, error) {
+func (r *verificationRepository) AcquireStaleVerification(ctx context.Context) (*Verification, error) {
 	query := `
-		SELECT id, inn, status, author_email, company_id, requested_data_types, created_at, updated_at
-		FROM verifications
-		WHERE status = $1
+		UPDATE verifications
+		SET status = 'PROCESSING', updated_at = NOW()
+		WHERE id = (
+			SELECT id
+			FROM verifications
+			WHERE status = 'IN_PROCESS' OR status = 'PROCESSING'
+			ORDER BY updated_at ASC
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		)
+		RETURNING id, inn, status, author_email, company_id, requested_data_types, created_at, updated_at
 	`
+	var v Verification
+	err := r.db.QueryRow(ctx, query).Scan(
+		&v.ID, &v.Inn, &v.Status, &v.AuthorEmail, &v.CompanyID,
+		&v.RequestedDataTypes, &v.CreatedAt, &v.UpdatedAt,
+	)
 
-	rows, err := r.db.Query(ctx, query, status)
 	if err != nil {
-		r.logger.Error("failed to get verifications by status", zap.Error(err), zap.String("status", status))
-		return nil, fmt.Errorf("failed to get verifications by status: %w", err)
-	}
-	defer rows.Close()
-
-	var verifications []*Verification
-	for rows.Next() {
-		var v Verification
-		err := rows.Scan(&v.ID, &v.Inn, &v.Status, &v.AuthorEmail, &v.CompanyID, &v.RequestedDataTypes, &v.CreatedAt, &v.UpdatedAt)
-		if err != nil {
-			r.logger.Error("failed to scan verification", zap.Error(err))
-			continue
+		if err.Error() == "no rows in result set" { // pgx specific error
+			return nil, nil // No stale verification found, not an error
 		}
-		verifications = append(verifications, &v)
+		r.logger.Error("failed to acquire stale verification", zap.Error(err))
+		return nil, fmt.Errorf("failed to acquire stale verification: %w", err)
 	}
 
-	if rows.Err() != nil {
-		r.logger.Error("error while iterating over verifications", zap.Error(rows.Err()))
-		return nil, fmt.Errorf("error while iterating over verifications: %w", rows.Err())
-	}
-
-	return verifications, nil
+	return &v, nil
 }

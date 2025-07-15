@@ -12,6 +12,7 @@ import (
 	"scoring_worker/internal/repository"
 	"scoring_worker/internal/service"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -45,7 +46,7 @@ func main() {
 	credinformClient := credinform.NewClient(&cfg.Credinform, log)
 	verificationService := service.NewVerificationService(credinformClient, repo, log)
 
-	worker := NewWorker(log, repo, verificationService, natsClient)
+	worker := NewWorker(log, repo, verificationService, natsClient, cfg.WorkerConcurrency)
 	worker.Run()
 }
 
@@ -74,14 +75,19 @@ type Worker struct {
 	repo                repository.VerificationRepository
 	verificationService service.VerificationService
 	natsClient          messaging.NATSClient
+	concurrencyCh       chan struct{}
 }
 
-func NewWorker(log *zap.Logger, repo repository.VerificationRepository, verificationService service.VerificationService, natsClient messaging.NATSClient) *Worker {
+func NewWorker(log *zap.Logger, repo repository.VerificationRepository, verificationService service.VerificationService, natsClient messaging.NATSClient, concurrency int) *Worker {
+	if concurrency <= 0 {
+		concurrency = 5
+	}
 	return &Worker{
 		log:                 log,
 		repo:                repo,
 		verificationService: verificationService,
 		natsClient:          natsClient,
+		concurrencyCh:       make(chan struct{}, concurrency),
 	}
 }
 
@@ -101,32 +107,36 @@ func (w *Worker) Run() {
 }
 
 func (w *Worker) resumeProcessing(ctx context.Context) {
-	w.log.Info("Checking for verifications to resume...")
-	for _, status := range []string{"IN_PROCESS", "PROCESSING"} {
-		verificationsToResume, err := w.repo.GetByStatus(ctx, status)
+	w.log.Info("Checking for stale verifications to resume...")
+	for {
+		verification, err := w.repo.AcquireStaleVerification(ctx)
 		if err != nil {
-			w.log.Error("Failed to get verifications to resume", zap.Error(err), zap.String("status", status))
+			w.log.Error("Failed to acquire stale verification", zap.Error(err))
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
-		if len(verificationsToResume) > 0 {
-			w.log.Info("Resuming verifications", zap.Int("count", len(verificationsToResume)), zap.String("status", status))
-			for _, v := range verificationsToResume {
-				go func(verification repository.Verification) {
-					w.log.Info("Resuming verification processing", zap.String("id", verification.ID), zap.String("inn", verification.Inn))
-					if err := w.verificationService.ProcessVerification(context.Background(), verification.ID, verification.Inn, verification.RequestedDataTypes); err != nil {
-						w.log.Error("Failed to process resumed verification", zap.Error(err), zap.String("id", verification.ID))
-						w.natsClient.PublishVerificationCompleted(ctx, verification.ID, "ERROR", err.Error())
-						return
-					}
-					w.log.Info("Resumed verification processing completed", zap.String("id", verification.ID))
-					err = w.natsClient.PublishVerificationCompleted(ctx, verification.ID, "COMPLETED", "")
-					if err != nil {
-						w.log.Error("Failed to publish completion notification for resumed verification", zap.Error(err), zap.String("id", verification.ID))
-					}
-				}(*v)
-			}
+		if verification == nil {
+			w.log.Info("No more stale verifications to resume.")
+			break
 		}
+
+		go func(v repository.Verification) {
+			w.concurrencyCh <- struct{}{}
+			defer func() { <-w.concurrencyCh }()
+
+			w.log.Info("Resuming verification processing", zap.String("id", v.ID), zap.String("inn", v.Inn))
+			if err := w.verificationService.ProcessVerification(context.Background(), v.ID, v.Inn, v.RequestedDataTypes); err != nil {
+				w.log.Error("Failed to process resumed verification", zap.Error(err), zap.String("id", v.ID))
+				w.natsClient.PublishVerificationCompleted(ctx, v.ID, "ERROR", err.Error())
+				return
+			}
+			w.log.Info("Resumed verification processing completed", zap.String("id", v.ID))
+			err = w.natsClient.PublishVerificationCompleted(ctx, v.ID, "COMPLETED", "")
+			if err != nil {
+				w.log.Error("Failed to publish completion notification for resumed verification", zap.Error(err), zap.String("id", v.ID))
+			}
+		}(*verification)
 	}
 }
 
@@ -142,6 +152,9 @@ func (w *Worker) subscribeToVerifications(ctx context.Context) error {
 		}
 
 		go func(id string, inn string, requestedTypes []string) {
+			w.concurrencyCh <- struct{}{}
+			defer func() { <-w.concurrencyCh }()
+
 			w.log.Info("Starting verification processing", zap.String("id", id), zap.String("inn", inn))
 
 			if err := w.verificationService.ProcessVerification(context.Background(), id, inn, requestedTypes); err != nil {

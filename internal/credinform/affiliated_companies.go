@@ -12,7 +12,7 @@ type AffiliatedCompaniesParams struct {
 }
 
 func (c *Client) GetAffiliatedCompanies(ctx context.Context, companyID string, params AffiliatedCompaniesParams) (*types.AffiliatedCompanies, error) {
-	body, err := c.getCompanyData(ctx, "CompanyInformation/GetAffiliatedCompanies", companyID, params)
+	body, err := c.getCompanyData(ctx, "CompanyInformation/AffiliatedCompanies", companyID, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get affiliated companies: %w", err)
 	}

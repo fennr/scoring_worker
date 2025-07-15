@@ -10,7 +10,7 @@ import (
 type BasicInformationParams struct{}
 
 func (c *Client) GetBasicInformation(ctx context.Context, companyID string, params BasicInformationParams) (*types.BasicInformation, error) {
-	body, err := c.getCompanyData(ctx, "CompanyInformation/GetBasicInformation", companyID, params)
+	body, err := c.getCompanyData(ctx, "CompanyInformation/BasicInformation", companyID, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get basic information: %w", err)
 	}

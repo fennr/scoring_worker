@@ -12,7 +12,7 @@ type AddressesByCredinformParams struct{}
 type AddressesByUnifiedStateRegisterParams struct{}
 
 func (c *Client) GetAddressesByCredinform(ctx context.Context, companyID string, params AddressesByCredinformParams) (*types.AddressesByCredinform, error) {
-	body, err := c.getCompanyData(ctx, "CompanyInformation/GetAddressesByCredinform", companyID, params)
+	body, err := c.getCompanyData(ctx, "CompanyInformation/AddressesByCredinform", companyID, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get addresses by credinform: %w", err)
 	}
@@ -28,7 +28,7 @@ func (c *Client) GetAddressesByCredinform(ctx context.Context, companyID string,
 }
 
 func (c *Client) GetAddressesByUnifiedStateRegister(ctx context.Context, companyID string, params AddressesByUnifiedStateRegisterParams) (*types.AddressesByUnifiedStateRegister, error) {
-	body, err := c.getCompanyData(ctx, "CompanyInformation/GetAddressesByUnifiedStateRegister", companyID, params)
+	body, err := c.getCompanyData(ctx, "CompanyInformation/AddressesByUnifiedStateRegister", companyID, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get addresses by unified state register: %w", err)
 	}

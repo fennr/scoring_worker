@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	Database   DatabaseConfig   `mapstructure:"database"`
-	NATS       NATSConfig       `mapstructure:"nats"`
-	Log        LogConfig        `mapstructure:"log"`
-	Credinform CredinformConfig `mapstructure:"credinform"`
+	Database          DatabaseConfig   `mapstructure:"database"`
+	NATS              NATSConfig       `mapstructure:"nats"`
+	Log               LogConfig        `mapstructure:"log"`
+	Credinform        CredinformConfig `mapstructure:"credinform"`
+	WorkerConcurrency int              `mapstructure:"worker_concurrency" env-default:"5"`
 }
 
 type DatabaseConfig struct {

@@ -15,7 +15,7 @@ type ArbitrageStatisticsParams struct {
 }
 
 func (c *Client) GetArbitrageStatistics(ctx context.Context, companyID string, params ArbitrageStatisticsParams) (*types.ArbitrageStatistics, error) {
-	body, err := c.getCompanyData(ctx, "CompanyInformation/GetArbitrageStatistics", companyID, params)
+	body, err := c.getCompanyData(ctx, "CompanyInformation/ArbitrageStatistics", companyID, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get arbitrage statistics: %w", err)
 	}

@@ -10,7 +10,7 @@ import (
 type ActivitiesParams struct{}
 
 func (c *Client) GetActivities(ctx context.Context, companyID string, params ActivitiesParams) (*types.Activities, error) {
-	body, err := c.getCompanyData(ctx, "CompanyInformation/GetActivities", companyID, params)
+	body, err := c.getCompanyData(ctx, "CompanyInformation/Activities", companyID, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get activities: %w", err)
 	}
