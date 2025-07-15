@@ -13,33 +13,33 @@ type AffiliatedCompanies struct {
 }
 
 type AffiliationUnderAdministration struct {
-	BaseCompany
+	BasicInformation
 	AffiliatedNaturalPersonList []*AffiliatedNaturalPerson `json:"affiliatedNaturalPersonList,omitempty"`
 }
 
 type AffiliationToManagersSharesByNaturalPersons struct {
-	BaseCompany
+	BasicInformation
 	AffiliatedNaturalPersonList []*AffiliatedNaturalPerson `json:"affiliatedNaturalPersonList,omitempty"`
 }
 
 type AffiliationToManagingCompany struct {
-	BaseCompany
+	BasicInformation
 	AffiliatedCompanyList []*AffiliatedCompany `json:"affiliatedCompanyList,omitempty"`
 }
 
 type AffiliationToShareholdersLegalPersons struct {
-	BaseCompany
+	BasicInformation
 	AffiliatedCompanyList     []*AffiliatedCompany     `json:"affiliatedCompanyList,omitempty"`
 	AffiliatedLegalEntityList []*AffiliatedLegalEntity `json:"affiliatedLegalEntityList,omitempty"`
 }
 
 type AffiliationToLiquidatorOrBankruptcyAdmin struct {
-	BaseCompany
+	BasicInformation
 	AffiliatedNaturalPersonList []*AffiliatedNaturalPerson `json:"affiliatedNaturalPersonList,omitempty"`
 }
 
 type AffiliatedCompany struct {
-	BaseCompany
+	BasicInformation
 	ContributionPercent *float64 `json:"contributionPercent,omitempty"`
 }
 

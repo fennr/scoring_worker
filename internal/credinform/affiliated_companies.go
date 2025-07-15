@@ -2,6 +2,8 @@ package credinform
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"scoring_worker/internal/credinform/types"
 )
 
@@ -9,14 +11,18 @@ type AffiliatedCompaniesParams struct {
 	AffiliationTypes []string `json:"affiliationTypes"`
 }
 
-func (c *Client) GetAffiliatedCompanies(ctx context.Context, companyID string, params AffiliatedCompaniesParams) (types.AffiliatedCompaniesResponse, error) {
-	var result types.AffiliatedCompaniesResponse
-	resp, err := c.GetCompanyData(ctx, "AffiliatedCompanies", companyID, params)
+func (c *Client) GetAffiliatedCompanies(ctx context.Context, companyID string, params AffiliatedCompaniesParams) (*types.AffiliatedCompanies, error) {
+	body, err := c.getCompanyData(ctx, "CompanyInformation/GetAffiliatedCompanies", companyID, params)
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("failed to get affiliated companies: %w", err)
 	}
-	if err := DecodeToType(resp, &result); err != nil {
-		return result, err
+
+	var response struct {
+		Data types.AffiliatedCompanies `json:"data"`
 	}
-	return result, nil
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal affiliated companies response: %w", err)
+	}
+
+	return &response.Data, nil
 }

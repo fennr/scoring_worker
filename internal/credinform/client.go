@@ -257,102 +257,82 @@ func structToMap(data interface{}) (map[string]interface{}, error) {
 	return m, err
 }
 
-func (c *Client) GetCompanyData(ctx context.Context, method, companyID string, params interface{}) (interface{}, error) {
+func (c *Client) getCompanyData(ctx context.Context, method string, companyID string, params interface{}) ([]byte, error) {
 	if c.accessKey == "" {
 		if err := c.Authenticate(ctx); err != nil {
-			return nil, fmt.Errorf("failed to authenticate: %w", err)
+			return nil, fmt.Errorf("failed to authenticate for %s: %w", method, err)
 		}
 	}
 
-	jsonData := map[string]interface{}{
-		"companyId": companyID,
-		"language":  "Russian",
-	}
-
-	if params != nil {
-		extra, err := structToMap(params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert params: %w", err)
-		}
-		for k, v := range extra {
-			jsonData[k] = v
-		}
-	}
-
-	reqData, err := json.Marshal(jsonData)
+	extra, err := structToMap(params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, fmt.Errorf("failed to convert params to map for %s: %w", method, err)
 	}
 
-	url := fmt.Sprintf("%s/api/CompanyInformation/%s?apiVersion=%s",
-		c.config.BaseURL, method, c.apiVersion)
+	reqData, err := json.Marshal(CompanyInformationRequest{
+		CompanyID: companyID,
+		Language:  "Russian",
+		Extra:     extra,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request for %s: %w", method, err)
+	}
 
-	var result interface{}
+	url := fmt.Sprintf("%s/api/%s?apiVersion=%s", c.config.BaseURL, method, c.apiVersion)
+	var responseBody []byte
 	var lastErr error
 
 	for attempt := 0; attempt <= c.config.RetryAttempts; attempt++ {
 		if attempt > 0 {
-			c.logger.Info("Retrying request", zap.String("method", method), zap.String("company_id", companyID), zap.Int("attempt", attempt))
+			c.logger.Info("Retrying request", zap.String("method", method), zap.String("companyID", companyID), zap.Int("attempt", attempt))
 			time.Sleep(time.Duration(c.config.RetryDelay) * time.Second)
 		}
 
 		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(reqData))
 		if err != nil {
-			lastErr = fmt.Errorf("failed to create request: %w", err)
+			lastErr = fmt.Errorf("failed to create request for %s: %w", method, err)
 			continue
 		}
-
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("accessKey", c.accessKey)
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			lastErr = fmt.Errorf("failed to send request: %w", err)
+			lastErr = fmt.Errorf("failed to send request for %s: %w", method, err)
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			lastErr = fmt.Errorf("failed to read response: %w", err)
+			lastErr = fmt.Errorf("failed to read response for %s: %w", method, err)
 			continue
 		}
 
 		if resp.StatusCode == http.StatusUnauthorized {
-			c.logger.Info("Token expired, re-authenticating")
+			c.logger.Info("Token expired, re-authenticating", zap.String("method", method))
 			c.accessKey = ""
 			if err := c.Authenticate(ctx); err != nil {
-				lastErr = fmt.Errorf("failed to re-authenticate: %w", err)
+				lastErr = fmt.Errorf("failed to re-authenticate for %s: %w", method, err)
 				continue
 			}
-			req.Header.Set("accessKey", c.accessKey)
+			// Retry the current request immediately after re-authenticating
+			attempt--
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(body))
+			lastErr = fmt.Errorf("request %s failed with status %d: %s", method, resp.StatusCode, string(body))
 			continue
 		}
 
-		var response CompanyInformationResponse
-		if err := json.Unmarshal(body, &response); err != nil {
-			lastErr = fmt.Errorf("failed to unmarshal response: %w", err)
-			continue
-		}
-
-		if response.Error != "" {
-			lastErr = fmt.Errorf("API error: %s", response.Error)
-			continue
-		}
-
-		result = response.Data
-		c.logger.Info("Successfully retrieved company data", zap.String("method", method), zap.String("company_id", companyID))
+		responseBody = body
 		break
 	}
 
-	if result == nil {
-		return nil, fmt.Errorf("all retry attempts failed: %w", lastErr)
+	if responseBody == nil {
+		return nil, fmt.Errorf("all retry attempts failed for %s: %w", method, lastErr)
 	}
 
-	return result, nil
+	return responseBody, nil
 }

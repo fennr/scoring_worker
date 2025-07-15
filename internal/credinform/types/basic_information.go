@@ -2,9 +2,9 @@ package types
 
 // --- Основная информация о компании ---
 
-type BasicInformationResponse = BaseCompany
+type BasicInformationResponse = BasicInformation
 
-type BaseCompany struct {
+type BasicInformation struct {
 	BaseBaseCompany
 	CaptionName                    *string      `json:"captionName,omitempty"`
 	ShortName                      *string      `json:"shortName,omitempty"`

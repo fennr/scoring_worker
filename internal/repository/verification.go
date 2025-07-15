@@ -15,6 +15,7 @@ type VerificationRepository interface {
 	UpdateCompanyID(ctx context.Context, id string, companyID string) error
 	AddData(ctx context.Context, verificationID string, dataType string, data string) error
 	GetByID(ctx context.Context, id string) (*Verification, error)
+	GetByStatus(ctx context.Context, status string) ([]*Verification, error)
 }
 
 type Verification struct {
@@ -86,10 +87,13 @@ func (r *verificationRepository) UpdateCompanyID(ctx context.Context, id string,
 func (r *verificationRepository) AddData(ctx context.Context, verificationID string, dataType string, data string) error {
 	query := `
 		INSERT INTO verification_data (verification_id, data_type, data, created_at)
-		VALUES ($1, $2, $3, $4)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (verification_id, data_type) DO UPDATE SET
+			data = EXCLUDED.data,
+			created_at = NOW()
 	`
 
-	_, err := r.db.Exec(ctx, query, verificationID, dataType, data, time.Now().Format(time.RFC3339))
+	_, err := r.db.Exec(ctx, query, verificationID, dataType, data)
 	if err != nil {
 		r.logger.Error("failed to add verification data", zap.Error(err), zap.String("verification_id", verificationID))
 		return fmt.Errorf("failed to add verification data: %w", err)
@@ -115,4 +119,37 @@ func (r *verificationRepository) GetByID(ctx context.Context, id string) (*Verif
 	}
 
 	return &verification, nil
+}
+
+func (r *verificationRepository) GetByStatus(ctx context.Context, status string) ([]*Verification, error) {
+	query := `
+		SELECT id, inn, status, author_email, company_id, requested_data_types, created_at, updated_at
+		FROM verifications
+		WHERE status = $1
+	`
+
+	rows, err := r.db.Query(ctx, query, status)
+	if err != nil {
+		r.logger.Error("failed to get verifications by status", zap.Error(err), zap.String("status", status))
+		return nil, fmt.Errorf("failed to get verifications by status: %w", err)
+	}
+	defer rows.Close()
+
+	var verifications []*Verification
+	for rows.Next() {
+		var v Verification
+		err := rows.Scan(&v.ID, &v.Inn, &v.Status, &v.AuthorEmail, &v.CompanyID, &v.RequestedDataTypes, &v.CreatedAt, &v.UpdatedAt)
+		if err != nil {
+			r.logger.Error("failed to scan verification", zap.Error(err))
+			continue
+		}
+		verifications = append(verifications, &v)
+	}
+
+	if rows.Err() != nil {
+		r.logger.Error("error while iterating over verifications", zap.Error(rows.Err()))
+		return nil, fmt.Errorf("error while iterating over verifications: %w", rows.Err())
+	}
+
+	return verifications, nil
 }

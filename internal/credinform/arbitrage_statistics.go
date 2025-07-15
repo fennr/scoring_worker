@@ -2,6 +2,8 @@ package credinform
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"scoring_worker/internal/credinform/types"
 )
 
@@ -12,14 +14,18 @@ type ArbitrageStatisticsParams struct {
 	ArbitrageSideCommonType []string `json:"arbitrageSideCommonType"`
 }
 
-func (c *Client) GetArbitrageStatistics(ctx context.Context, companyID string, params ArbitrageStatisticsParams) (types.ArbitrageStatisticsResponse, error) {
-	var result types.ArbitrageStatisticsResponse
-	resp, err := c.GetCompanyData(ctx, "ArbitrageStatistics", companyID, params)
+func (c *Client) GetArbitrageStatistics(ctx context.Context, companyID string, params ArbitrageStatisticsParams) (*types.ArbitrageStatistics, error) {
+	body, err := c.getCompanyData(ctx, "CompanyInformation/GetArbitrageStatistics", companyID, params)
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("failed to get arbitrage statistics: %w", err)
 	}
-	if err := DecodeToType(resp, &result); err != nil {
-		return result, err
+
+	var response struct {
+		Data types.ArbitrageStatistics `json:"data"`
 	}
-	return result, nil
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal arbitrage statistics response: %w", err)
+	}
+
+	return &response.Data, nil
 }

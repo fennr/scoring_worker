@@ -2,19 +2,25 @@ package credinform
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"scoring_worker/internal/credinform/types"
 )
 
 type ActivitiesParams struct{}
 
-func (c *Client) GetActivities(ctx context.Context, companyID string, params ActivitiesParams) (types.ActivitiesResponse, error) {
-	var result types.ActivitiesResponse
-	resp, err := c.GetCompanyData(ctx, "Activities", companyID, params)
+func (c *Client) GetActivities(ctx context.Context, companyID string, params ActivitiesParams) (*types.Activities, error) {
+	body, err := c.getCompanyData(ctx, "CompanyInformation/GetActivities", companyID, params)
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("failed to get activities: %w", err)
 	}
-	if err := DecodeToType(resp, &result); err != nil {
-		return result, err
+
+	var response struct {
+		Data types.Activities `json:"data"`
 	}
-	return result, nil
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal activities response: %w", err)
+	}
+
+	return &response.Data, nil
 }

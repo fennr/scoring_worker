@@ -14,21 +14,25 @@ import (
 	"go.uber.org/zap"
 )
 
-type CompanyService struct {
+type VerificationService interface {
+	ProcessVerification(ctx context.Context, verificationID, inn string, requestedTypes []string) error
+}
+
+type verificationService struct {
 	credinformClient *credinform.Client
 	repo             repository.VerificationRepository
 	logger           *zap.Logger
 }
 
-func NewCompanyService(client *credinform.Client, repo repository.VerificationRepository, logger *zap.Logger) *CompanyService {
-	return &CompanyService{
+func NewVerificationService(client *credinform.Client, repo repository.VerificationRepository, logger *zap.Logger) VerificationService {
+	return &verificationService{
 		credinformClient: client,
 		repo:             repo,
 		logger:           logger,
 	}
 }
 
-func (s *CompanyService) ProcessVerification(ctx context.Context, verificationID, inn string, requestedTypes []string) error {
+func (s *verificationService) ProcessVerification(ctx context.Context, verificationID, inn string, requestedTypes []string) error {
 	s.logger.Info("Starting verification processing",
 		zap.String("verification_id", verificationID),
 		zap.String("inn", inn),
@@ -56,11 +60,10 @@ func (s *CompanyService) ProcessVerification(ctx context.Context, verificationID
 	s.logger.Info("Verification processing completed",
 		zap.String("verification_id", verificationID),
 		zap.String("company_id", companyData.CompanyID))
-
 	return nil
 }
 
-func (s *CompanyService) searchCompany(ctx context.Context, verificationID, inn string) (*credinform.CompanyData, error) {
+func (s *verificationService) searchCompany(ctx context.Context, verificationID, inn string) (*credinform.CompanyData, error) {
 	companyData, err := s.credinformClient.SearchCompany(ctx, inn)
 	if err != nil {
 		s.logger.Error("Failed to search company", zap.Error(err), zap.String("inn", inn))
@@ -74,7 +77,7 @@ func (s *CompanyService) searchCompany(ctx context.Context, verificationID, inn 
 	return companyData, nil
 }
 
-func (s *CompanyService) prepareVerification(ctx context.Context, verificationID, companyID string) error {
+func (s *verificationService) prepareVerification(ctx context.Context, verificationID, companyID string) error {
 	if err := s.repo.UpdateCompanyID(ctx, verificationID, companyID); err != nil {
 		s.logger.Error("Failed to update company_id",
 			zap.Error(err),
@@ -86,7 +89,7 @@ func (s *CompanyService) prepareVerification(ctx context.Context, verificationID
 	return nil
 }
 
-func (s *CompanyService) processDataTypes(ctx context.Context, verificationID, companyID string, requestedTypes []string) {
+func (s *verificationService) processDataTypes(ctx context.Context, verificationID, companyID string, requestedTypes []string) {
 	var wg sync.WaitGroup
 	for _, dataType := range requestedTypes {
 		wg.Add(1)
@@ -95,7 +98,7 @@ func (s *CompanyService) processDataTypes(ctx context.Context, verificationID, c
 	wg.Wait()
 }
 
-func (s *CompanyService) fetchAndSaveData(ctx context.Context, wg *sync.WaitGroup, verificationID, companyID, dataType string) {
+func (s *verificationService) fetchAndSaveData(ctx context.Context, wg *sync.WaitGroup, verificationID, companyID, dataType string) {
 	defer wg.Done()
 
 	var dataForDB interface{}
@@ -148,7 +151,7 @@ func (s *CompanyService) fetchAndSaveData(ctx context.Context, wg *sync.WaitGrou
 	s.saveSuccessData(ctx, verificationID, companyID, dataType, dataForDB)
 }
 
-func (s *CompanyService) saveErrorData(ctx context.Context, verificationID, companyID, dataType string, err error) {
+func (s *verificationService) saveErrorData(ctx context.Context, verificationID, companyID, dataType string, err error) {
 	errorData := map[string]interface{}{
 		"error":        err.Error(),
 		"type":         dataType,
@@ -161,7 +164,7 @@ func (s *CompanyService) saveErrorData(ctx context.Context, verificationID, comp
 	}
 }
 
-func (s *CompanyService) saveSuccessData(ctx context.Context, verificationID, companyID, dataType string, dataForDB interface{}) {
+func (s *verificationService) saveSuccessData(ctx context.Context, verificationID, companyID, dataType string, dataForDB interface{}) {
 	resultData := map[string]interface{}{
 		"data":         dataForDB,
 		"type":         dataType,
@@ -185,7 +188,7 @@ func (s *CompanyService) saveSuccessData(ctx context.Context, verificationID, co
 	}
 }
 
-func (s *CompanyService) updateVerificationStatus(ctx context.Context, verificationID, status string) error {
+func (s *verificationService) updateVerificationStatus(ctx context.Context, verificationID, status string) error {
 	if err := s.repo.UpdateStatus(ctx, verificationID, status); err != nil {
 		s.logger.Error("Failed to update status",
 			zap.Error(err),

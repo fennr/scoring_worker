@@ -2,32 +2,43 @@ package credinform
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"scoring_worker/internal/credinform/types"
 )
 
 type AddressesByCredinformParams struct{}
+
 type AddressesByUnifiedStateRegisterParams struct{}
 
-func (c *Client) GetAddressesByCredinform(ctx context.Context, companyID string, params AddressesByCredinformParams) (types.AddressesByCredinformResponse, error) {
-	var result types.AddressesByCredinformResponse
-	resp, err := c.GetCompanyData(ctx, "AddressesByCredinform", companyID, params)
+func (c *Client) GetAddressesByCredinform(ctx context.Context, companyID string, params AddressesByCredinformParams) (*types.AddressesByCredinform, error) {
+	body, err := c.getCompanyData(ctx, "CompanyInformation/GetAddressesByCredinform", companyID, params)
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("failed to get addresses by credinform: %w", err)
 	}
-	if err := DecodeToType(resp, &result); err != nil {
-		return result, err
+
+	var response struct {
+		Data types.AddressesByCredinform `json:"data"`
 	}
-	return result, nil
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal addresses by credinform response: %w", err)
+	}
+
+	return &response.Data, nil
 }
 
-func (c *Client) GetAddressesByUnifiedStateRegister(ctx context.Context, companyID string, params AddressesByUnifiedStateRegisterParams) (types.AddressesByUnifiedStateRegisterResponse, error) {
-	var result types.AddressesByUnifiedStateRegisterResponse
-	resp, err := c.GetCompanyData(ctx, "AddressesByUnifiedStateRegister", companyID, params)
+func (c *Client) GetAddressesByUnifiedStateRegister(ctx context.Context, companyID string, params AddressesByUnifiedStateRegisterParams) (*types.AddressesByUnifiedStateRegister, error) {
+	body, err := c.getCompanyData(ctx, "CompanyInformation/GetAddressesByUnifiedStateRegister", companyID, params)
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("failed to get addresses by unified state register: %w", err)
 	}
-	if err := DecodeToType(resp, &result); err != nil {
-		return result, err
+
+	var response struct {
+		Data types.AddressesByUnifiedStateRegister `json:"data"`
 	}
-	return result, nil
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal addresses by unified state register response: %w", err)
+	}
+
+	return &response.Data, nil
 }
