@@ -30,12 +30,17 @@ type Verification struct {
 }
 
 type verificationRepository struct {
-	db     *pgxpool.Pool
-	logger *zap.Logger
+	db        *pgxpool.Pool
+	cacheRepo DataCacheRepository
+	logger    *zap.Logger
 }
 
-func NewVerificationRepository(db *pgxpool.Pool, logger *zap.Logger) VerificationRepository {
-	return &verificationRepository{db: db, logger: logger}
+func NewVerificationRepository(db *pgxpool.Pool, cacheRepo DataCacheRepository, logger *zap.Logger) VerificationRepository {
+	return &verificationRepository{
+		db:        db,
+		cacheRepo: cacheRepo,
+		logger:    logger,
+	}
 }
 
 func (r *verificationRepository) Create(ctx context.Context, id string, inn string, requestedTypes []string, authorEmail string) error {
@@ -84,16 +89,23 @@ func (r *verificationRepository) UpdateCompanyID(ctx context.Context, id string,
 	return nil
 }
 
+// AddData добавляет данные проверки с использованием системы кэширования
 func (r *verificationRepository) AddData(ctx context.Context, verificationID string, dataType string, data string) error {
+	dataHash, err := r.cacheRepo.StoreData(ctx, data)
+	if err != nil {
+		r.logger.Error("failed to store data in cache", zap.Error(err), zap.String("verification_id", verificationID))
+		return fmt.Errorf("failed to store data in cache: %w", err)
+	}
+
 	query := `
-		INSERT INTO verification_data (verification_id, data_type, data, created_at)
+		INSERT INTO verification_data (verification_id, data_type, data_hash, created_at)
 		VALUES ($1, $2, $3, NOW())
 		ON CONFLICT (verification_id, data_type) DO UPDATE SET
-			data = EXCLUDED.data,
+			data_hash = EXCLUDED.data_hash,
 			created_at = NOW()
 	`
 
-	_, err := r.db.Exec(ctx, query, verificationID, dataType, data)
+	_, err = r.db.Exec(ctx, query, verificationID, dataType, dataHash)
 	if err != nil {
 		r.logger.Error("failed to add verification data", zap.Error(err), zap.String("verification_id", verificationID))
 		return fmt.Errorf("failed to add verification data: %w", err)

@@ -42,7 +42,8 @@ func main() {
 	}
 	defer natsClient.Close()
 
-	repo := repository.NewVerificationRepository(db, log)
+	cacheRepo := repository.NewDataCacheRepository(db, log)
+	repo := repository.NewVerificationRepository(db, cacheRepo, log)
 	credinformClient := credinform.NewClient(&cfg.Credinform, log)
 	verificationService := service.NewVerificationService(credinformClient, repo, log)
 
