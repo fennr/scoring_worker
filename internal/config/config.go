@@ -43,19 +43,26 @@ type CredinformConfig struct {
 }
 
 func Load() (*Config, error) {
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./config")
-
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
-		}
-	}
+	// Set default values
+	viper.SetDefault("database.host", "localhost")
+	viper.SetDefault("database.port", 5432)
+	viper.SetDefault("database.user", "postgres")
+	viper.SetDefault("database.password", "postgres")
+	viper.SetDefault("database.dbname", "scoring")
+	viper.SetDefault("database.sslmode", "disable")
+	viper.SetDefault("nats.url", "nats://localhost:4222")
+	viper.SetDefault("log.level", "info")
+	viper.SetDefault("log.json", false)
+	viper.SetDefault("credinform.base_url", "https://restapi.credinform.ru")
+	viper.SetDefault("credinform.username", "")
+	viper.SetDefault("credinform.password", "")
+	viper.SetDefault("credinform.timeout", 30)
+	viper.SetDefault("credinform.retry_attempts", 3)
+	viper.SetDefault("credinform.retry_delay", 1)
+	viper.SetDefault("worker_concurrency", 5)
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {

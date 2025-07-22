@@ -11,5 +11,4 @@ RUN go build -o scoring_worker .
 FROM alpine:3.19
 WORKDIR /app
 COPY --from=builder /app/scoring_worker /app/scoring_worker
-COPY config.yaml ./
 CMD ["/app/scoring_worker"] 

@@ -88,6 +88,22 @@ type CompanyInformationResponse struct {
 }
 
 func NewClient(cfg *config.CredinformConfig, logger *zap.Logger) *Client {
+	logger.Info("Creating Credinform client",
+		zap.String("username", cfg.Username),
+		zap.String("base_url", cfg.BaseURL),
+		zap.Bool("password_set", cfg.Password != ""),
+		zap.Int("timeout", cfg.Timeout))
+
+	if cfg.Username == "" {
+		logger.Error("Credinform username is empty")
+		return nil
+	}
+
+	if cfg.Password == "" {
+		logger.Error("Credinform password is empty")
+		return nil
+	}
+
 	decodedPassword, err := base64.StdEncoding.DecodeString(cfg.Password)
 	if err != nil {
 		logger.Error("failed to decode credinform password from base64", zap.Error(err))
